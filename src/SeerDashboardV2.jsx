@@ -18,7 +18,7 @@ import SafetyTrafficView, { fetchSafety } from "./SafetyTrafficView";
    back to mock data automatically so the demo never shows a blank screen.
    ============================================================================ */
 
-const API_BASE = "https://mario-motor-lat-functions.trycloudflare.com";                 // e.g. "http://localhost:8000"; "" = mock
+const API_BASE = "https://aids-armor-forecast-horses.trycloudflare.com";                 // e.g. "http://localhost:8000"; "" = mock
 const POLL_MS = 4000;
 
 const SITES = [

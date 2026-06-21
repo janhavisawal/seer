@@ -18,7 +18,7 @@ import SafetyTrafficView, { fetchSafety } from "./SafetyTrafficView";
    back to mock data automatically so the demo never shows a blank screen.
    ============================================================================ */
 
-const API_BASE = "https://aids-armor-forecast-horses.trycloudflare.com";                 // e.g. "http://localhost:8000"; "" = mock
+const API_BASE = "";                 // e.g. "http://localhost:8000"; "" = mock
 const POLL_MS = 4000;
 
 const SITES = [
@@ -946,7 +946,7 @@ function PlanogramView({ shelves }) {
 
 export default function SeerDashboard() {
   const [siteId, setSiteId] = useState("all");
-  const [view, setView] = useState("overview");          // "overview" | "analytics"
+  const [view, setView] = useState("safety");          // "overview" | "analytics" | "planogram" | "safety"
   const [data, setData] = useState(null);
   const [inv, setInv] = useState([]);
   const [shelves, setShelves] = useState([]);

@@ -18,7 +18,7 @@ import SafetyTrafficView, { fetchSafety } from "./SafetyTrafficView";
    back to mock data automatically so the demo never shows a blank screen.
    ============================================================================ */
 
-const API_BASE = "https://327d-34-124-220-201.ngrok-free.app";                 // e.g. "http://localhost:8000"; "" = mock
+const API_BASE = "https://0784-34-124-220-201.ngrok-free.app";                 // e.g. "http://localhost:8000"; "" = mock
 const POLL_MS = 4000;
 
 const SITES = [

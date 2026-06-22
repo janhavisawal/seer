@@ -90,7 +90,9 @@ export function mockSafety(siteId = "all") {
 export async function fetchSafety(API_BASE, siteId) {
   if (!API_BASE) return mockSafety(siteId);
   try {
-    const res = await fetch(`${API_BASE}/api/safety?site=${siteId}`);
+    const res = await fetch(`${API_BASE}/api/safety?site=${siteId}`, {
+      headers: { "ngrok-skip-browser-warning": "true" },
+    });
     if (!res.ok) throw new Error(res.status);
     return await res.json();
   } catch {
@@ -155,10 +157,35 @@ function TrafficFeedCard({ C, feed }) {
         <span style={{ fontSize: 11.5, color: C.faint }}>vehicles in frame</span>
       </div>
       <ClassBars C={C} classes={feed.classes} total={feed.total} />
-      <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11.5, color: C.dim }}>
-        <span>◀ left lane <b style={{ color: C.text }}>{fmtNum(feed.lanes.left)}</b></span>
-        <span>right lane <b style={{ color: C.text }}>{fmtNum(feed.lanes.right)}</b> ▶</span>
-      </div>
+      {(() => {
+        const lanes = feed.lanes || {};
+        const keys = Object.keys(lanes);
+        // legacy {left,right} shape -> show as before
+        if (keys.length === 2 && "left" in lanes && "right" in lanes) {
+          return (
+            <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11.5, color: C.dim }}>
+              <span>◀ left lane <b style={{ color: C.text }}>{fmtNum(lanes.left)}</b></span>
+              <span>right lane <b style={{ color: C.text }}>{fmtNum(lanes.right)}</b> ▶</span>
+            </div>
+          );
+        }
+        // named lanes -> chips with cumulative counts (the lane-counting metric)
+        if (keys.length) {
+          return (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              {keys.map((k) => (
+                <span key={k} style={{
+                  fontSize: 11, color: C.dim, background: C.panel,
+                  border: `1px solid ${C.border}`, borderRadius: 6, padding: "3px 8px",
+                }}>
+                  {k} <b style={{ color: C.text }}>{fmtNum(lanes[k])}</b>
+                </span>
+              ))}
+            </div>
+          );
+        }
+        return null;
+      })()}
     </div>
   );
 }

@@ -18,8 +18,34 @@ import SafetyTrafficView, { fetchSafety } from "./SafetyTrafficView";
    back to mock data automatically so the demo never shows a blank screen.
    ============================================================================ */
 
-const API_BASE = "https://subsector-refusal-limit.ngrok-free.dev";                 // e.g. "http://localhost:8000"; "" = mock
+const API_BASE = "";                 // e.g. "http://localhost:8000"; "" = mock
 const POLL_MS = 4000;
+
+/* Build a stream URL. ngrok's free tier shows an interstitial warning page
+   that an <img> tag can't click through, so it receives HTML instead of video
+   and the tile fails. Appending ngrok-skip-browser-warning=true bypasses it.
+   Harmless on cloudflared / other hosts (just an ignored query param). */
+function streamSrc(cam) {
+  const base = `${API_BASE}${cam.streamUrl}`;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}ngrok-skip-browser-warning=true`;
+}
+
+/* Same skip header for fetch() data calls so ngrok doesn't return its
+   interstitial HTML instead of JSON. Ignored by non-ngrok hosts. */
+const NGROK_HEADERS = { "ngrok-skip-browser-warning": "true" };
+
+/* Detection categories for the upload picker. `role` is the backend preset
+   that selects which analyzer(s) run, so footage is matched to the right
+   detector (no litter on traffic clips, etc.). */
+const CATEGORIES = [
+  { id: "atcc",          label: "Vehicles / Traffic", sub: "count, classify, signal", role: "atcc" },
+  { id: "litter",        label: "Littering",          sub: "dumping + dropped waste", role: "people" },
+  { id: "loiter",        label: "Loitering",          sub: "dwell in a zone",         role: "people" },
+  { id: "helmet",        label: "Helmet",             sub: "rider without helmet",    role: "helmet" },
+  { id: "triple_riding", label: "Triple-riding",      sub: "3+ on one bike",          role: "triple_riding" },
+  { id: "anpr",          label: "Plates (ANPR)",      sub: "plate read + vehicles",   role: "anpr" },
+];
 
 const SITES = [
   { id: "all", name: "All sites" },
@@ -118,7 +144,7 @@ function mockInventory() {
 async function fetchDashboard(siteId) {
   if (!API_BASE) return mockDashboard(siteId);
   try {
-    const r = await fetch(`${API_BASE}/api/dashboard?site=${siteId}`);
+    const r = await fetch(`${API_BASE}/api/dashboard?site=${siteId}`, { headers: NGROK_HEADERS });
     if (!r.ok) throw new Error(r.status);
     return await r.json();
   } catch {
@@ -129,7 +155,7 @@ async function fetchDashboard(siteId) {
 async function fetchInventory() {
   if (!API_BASE) return mockInventory();
   try {
-    const r = await fetch(`${API_BASE}/api/inventory/trends`);
+    const r = await fetch(`${API_BASE}/api/inventory/trends`, { headers: NGROK_HEADERS });
     if (!r.ok) throw new Error(r.status);
     return await r.json();
   } catch {
@@ -169,7 +195,7 @@ function mockPlanogram() {
 async function fetchPlanogram() {
   if (!API_BASE) return mockPlanogram();
   try {
-    const r = await fetch(`${API_BASE}/api/planogram/state`);
+    const r = await fetch(`${API_BASE}/api/planogram/state`, { headers: NGROK_HEADERS });
     if (!r.ok) throw new Error(r.status);
     const j = await r.json();
     return j.length ? j : mockPlanogram();
@@ -193,24 +219,25 @@ async function apiAddCamera(body) {
 
 async function apiRemoveCamera(id) {
   if (!API_BASE) return true;
-  const r = await fetch(`${API_BASE}/api/cameras/${id}`, { method: "DELETE" });
+  const r = await fetch(`${API_BASE}/api/cameras/${id}`, { method: "DELETE", headers: NGROK_HEADERS });
   return r.ok;
 }
 
 /* POST /api/videos — multipart upload; returns job info (analyze) or camera (live_loop) */
-async function apiUploadVideo(file, mode, name) {
+async function apiUploadVideo(file, mode, role, name) {
   if (!API_BASE) return { _mock: true, mode };          // modal simulates the rest
   const fd = new FormData();
   fd.append("file", file);
   fd.append("mode", mode);
+  fd.append("role", role || "all");
   fd.append("name", name || file.name.replace(/\.[^.]+$/, ""));
-  const r = await fetch(`${API_BASE}/api/videos`, { method: "POST", body: fd });
+  const r = await fetch(`${API_BASE}/api/videos`, { method: "POST", body: fd, headers: NGROK_HEADERS });
   if (!r.ok) throw new Error((await r.json()).detail ?? `HTTP ${r.status}`);
   return await r.json();
 }
 
 async function apiVideoStatus(jobId) {
-  const r = await fetch(`${API_BASE}/api/videos/${jobId}/status`);
+  const r = await fetch(`${API_BASE}/api/videos/${jobId}/status`, { headers: NGROK_HEADERS });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return await r.json();
 }
@@ -273,7 +300,7 @@ function CameraFeed({ cam, focused }) {
     <div style={{ position: "relative", width: "100%", height: "100%", background: "#070A0F", borderRadius: focused ? 12 : 8, overflow: "hidden" }}>
       {!offline ? (
         <img
-          src={`${API_BASE}${cam.streamUrl}`}
+          src={streamSrc(cam)}
           alt={`${cam.name} live annotated feed`}
           onError={() => setErr(true)}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
@@ -469,6 +496,7 @@ function AddCameraModal({ onClose, onAdded }) {
 function UploadVideoModal({ onClose, onCameraAdded }) {
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState("analyze");
+  const [category, setCategory] = useState("atcc");   // CATEGORIES[].id -> backend role
   const [phase, setPhase] = useState("form");   // form | working | done | error
   const [prog, setProg] = useState({ pct: 0, fps: 0, frames: 0, total: 0 });
   const [summary, setSummary] = useState(null);
@@ -480,8 +508,9 @@ function UploadVideoModal({ onClose, onCameraAdded }) {
   const submit = async () => {
     if (!file) { setError("Choose a video file first."); return; }
     setError("");
+    const role = (CATEGORIES.find((c) => c.id === category) || {}).role || "all";
     try {
-      const res = await apiUploadVideo(file, mode);
+      const res = await apiUploadVideo(file, mode, role);
       if (res._mock) {
         if (mode === "live_loop") {
           const id = "cam_" + file.name.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "_");
@@ -558,6 +587,25 @@ function UploadVideoModal({ onClose, onCameraAdded }) {
               <input id="seer-vid" type="file" accept=".mp4,.mov,.avi,.mkv,.webm,video/*"
                 style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </label>
+
+            <div style={{ fontSize: 11, color: C.dim, fontWeight: 600, marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.4 }}>
+              Detection category
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {CATEGORIES.map((c) => (
+                <button key={c.id} onClick={() => setCategory(c.id)} style={{
+                  display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
+                  padding: "9px 11px", borderRadius: 9, cursor: "pointer", textAlign: "left",
+                  border: category === c.id ? `1.5px solid ${C.accent}` : `1px solid ${C.border}`,
+                  background: category === c.id ? C.accentBg : "transparent",
+                }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: category === c.id ? C.accent : C.text }}>
+                    {c.label}
+                  </span>
+                  <span style={{ fontSize: 10, color: C.faint }}>{c.sub}</span>
+                </button>
+              ))}
+            </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
               {[["analyze", "Analyze once", "annotated video + report", BarChart3],

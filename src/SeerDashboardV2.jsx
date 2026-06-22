@@ -18,7 +18,7 @@ import SafetyTrafficView, { fetchSafety } from "./SafetyTrafficView";
    back to mock data automatically so the demo never shows a blank screen.
    ============================================================================ */
 
-const API_BASE = "https://subsector-refusal-limit.ngrok-free.dev";                 // e.g. "http://localhost:8000"; "" = mock
+const API_BASE = "https://completion-raw-anymore-institution.trycloudflare.com";                 // e.g. "http://localhost:8000"; "" = mock
 const POLL_MS = 4000;
 
 /* Build a stream URL. ngrok's free tier shows an interstitial warning page
